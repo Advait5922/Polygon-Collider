@@ -1,0 +1,192 @@
+<!-- index.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Animation</title>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/110/three.min.js"></script>
+  <script>
+    // Create a scene
+    var scene = new THREE.Scene();
+
+    // Create a camera
+    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 5;
+
+    // Create a renderer
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Create cube
+    var cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    var cubeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ff00
+    });
+    var cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    scene.add(cube);
+
+    // Create hexagon
+    var hexagonGeometry = new THREE.CircleGeometry(1, 6);
+    var hexagonMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff0000
+    });
+    var hexagon = new THREE.Mesh(hexagonGeometry, hexagonMaterial);
+    scene.add(hexagon);
+
+    // Check if polygons intersect using GJK algorithm
+    function checkIntersection() {
+      var simplex = []; // Array to store simplex points
+
+      // Define support function to find the farthest point in a given direction
+      function support(direction) {
+        var cubePoint = getCubeSupportPoint(direction);
+        var hexagonPoint = getHexagonSupportPoint(direction);
+        return cubePoint.sub(hexagonPoint);
+      }
+
+      // Get the support point in the cube's direction
+      function getCubeSupportPoint(direction) {
+        var vertices = cube.geometry.vertices;
+        var maxDot = -Infinity;
+        var supportPoint;
+
+        for (var i = 0; i < vertices.length; i++) {
+          var vertex = vertices[i];
+          var dotProduct = vertex.dot(direction);
+
+          if (dotProduct > maxDot) {
+            maxDot = dotProduct;
+            supportPoint = vertex;
+          }
+        }
+
+        return supportPoint;
+      }
+
+      // Get the support point in the hexagon's direction
+      function getHexagonSupportPoint(direction) {
+        var vertices = hexagon.geometry.vertices;
+        var maxDot = -Infinity;
+        var supportPoint;
+
+        for (var i = 0; i < vertices.length; i++) {
+          var vertex = vertices[i];
+          var dotProduct = vertex.dot(direction);
+
+          if (dotProduct > maxDot) {
+            maxDot = dotProduct;
+            supportPoint = vertex;
+          }
+        }
+
+        return supportPoint;
+      }
+
+      // Perform GJK algorithm
+      var direction = new THREE.Vector3(1, 0, 0); // Initial direction
+      var pointA = support(direction);
+
+      direction.negate(); // Reverse the direction
+      var pointB = support(direction);
+
+      direction.negate(); // Reverse the direction
+      simplex.push(pointA, pointB); // Add initial points to simplex
+
+      while (true) {
+        direction = tripleProduct(pointB, pointA, pointA); // Calculate new direction
+
+        if (direction.dot(pointA) <= 0) {
+          return false; // No intersection
+        }
+
+        var pointC = support(direction); // Get the support point in the new direction
+
+        if (pointC.dot(direction) < 0) {
+          return false; // No intersection
+        }
+
+        simplex.push(pointC); // Add the new point to the simplex
+
+        if (containsOrigin(simplex, direction)) {
+          return true; // Intersection found
+        }
+      }
+    }
+
+    // Perform triple product (a x b) x a
+    function tripleProduct(a, b, c) {
+      var crossProduct = new THREE.Vector3();
+      crossProduct.crossVectors(b, c);
+      crossProduct.cross(a);
+      return crossProduct;
+    }
+
+    // Check if the simplex contains the origin
+    function containsOrigin(simplex, direction) {
+      var lastPoint = simplex[simplex.length - 1];
+      var ao = lastPoint.clone().negate();
+
+      if (simplex.length === 3) {
+        var b = simplex[1];
+        var c = simplex[0];
+
+        var ab = b.clone().sub(lastPoint);
+        var ac = c.clone().sub(lastPoint);
+
+        var abc = tripleProduct(ac, ab, ab);
+        var abPerp = tripleProduct(abc, ab, ac);
+
+        if (abPerp.dot(ao) > 0) {
+          simplex.splice(0, 1); // Remove point C
+          direction.copy(abPerp);
+        } else {
+          var acPerp = tripleProduct(ac, abc, ab);
+
+          if (acPerp.dot(ao) > 0) {
+            simplex.splice(1, 1); // Remove point B
+            direction.copy(acPerp);
+          } else {
+            return true; // Origin is within the triangle
+          }
+        }
+      } else {
+        var b = simplex[0];
+        var ab = b.clone().sub(lastPoint);
+        var abPerp = tripleProduct(ab, ao, ab);
+        direction.copy(abPerp);
+      }
+
+      return false; // Origin is not within the simplex
+    }
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      cube.rotation.x += 0.01;
+      cube.rotation.y += 0.01;
+      hexagon.rotation.z += 0.01;
+
+      // Check for intersection
+      var isIntersecting = checkIntersection();
+      console.log("Intersecting: " + isIntersecting);
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+
+</html>
